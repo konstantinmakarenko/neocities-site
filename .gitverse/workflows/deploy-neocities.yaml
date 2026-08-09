@@ -1,0 +1,54 @@
+name: Deploy to Neocities
+
+on: [push]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: repo_clone
+        uses: actions/checkout@v4
+
+      - name: Загружаем файлы на Neocities
+        env:
+          NEOCITIES_USER: ${{ secrets.NEOCITIES_USER }}
+          NEOCITIES_PASS: ${{ secrets.NEOCITIES_PASS }}
+        run: |
+          set -e
+
+          if [ -z "$NEOCITIES_USER" ] || [ -z "$NEOCITIES_PASS" ]; then
+            echo "Ошибка: секреты NEOCITIES_USER и NEOCITIES_PASS не заданы."
+            echo "Добавьте их в настройки репозитория на GitVerse:"
+            echo "  Настройки -> Секреты и переменные -> Секреты"
+            exit 1
+          fi
+
+          echo "=== Деплой на Neocities ==="
+          echo ""
+
+          success_count=0
+          fail_count=0
+
+          while IFS= read -r filepath; do
+            remote_path="${filepath#src/}"
+            echo "Загружаю: $filepath -> $remote_path"
+
+            response=$(curl -s -u "$NEOCITIES_USER:$NEOCITIES_PASS" \
+              -F "$remote_path=@$filepath" \
+              "https://neocities.org/api/upload")
+
+            if echo "$response" | grep -q '"success"'; then
+              echo "  OK"
+              success_count=$((success_count + 1))
+            else
+              echo "  ОШИБКА: $response"
+              fail_count=$((fail_count + 1))
+            fi
+          done < <(find src -type f)
+
+          echo ""
+          echo "=== Готово: успешно $success_count, с ошибками $fail_count ==="
+
+          if [ "$fail_count" -gt 0 ]; then
+            exit 1
+          fi
